@@ -1,0 +1,156 @@
+<script type='module'>
+
+    import * as THREE from "https://cdn.skypack.dev/three@0.112";
+    import * as dat from "https://cdn.skypack.dev/dat.gui@0.7.9";
+    import Stats from "https://cdn.skypack.dev/stats.js@0.17.0";
+    import { OrbitControls } from "https://unpkg.com/three@0.112/examples/jsm/controls/OrbitControls.js";
+    import { Lensflare,  LensflareElement} from "https://unpkg.com/three@0.112/examples/jsm/objects/Lensflare.js";
+    
+    const gui = new dat.GUI();
+    const stats = new Stats();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75,  window.innerWidth / window.innerHeight,  0.1,  100);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const textureLoader = new THREE.TextureLoader();
+    const cubeTextureLoader = new THREE.CubeTextureLoader();
+    
+    const earthMap = "https://i.imgur.com/crQ0ESd.jpg";
+    const cloudMap = "https://i.imgur.com/7NLKWFb.jpg";
+    const cloudAlpha = "https://i.imgur.com/uz92tq5.jpg";
+    
+    camera.position.set(1, 0, 3);
+    renderer.shadowMap.enabled = true;
+    controls.enableDamping = true;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    controls.dampingFactor = 0.05;
+    controls.maxDistance = 12;
+    controls.minDistance = 2;
+    controls.enablePan = false;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.75;
+    
+    document.body.style.margin = 0;
+    document.body.style.overflow = "hidden";
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(stats.dom);
+    
+    const gridHelper = new THREE.GridHelper(20, 30);
+    gridHelper.visible = false;
+    scene.add(gridHelper);
+    
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    
+    const axis = new THREE.AxesHelper(1.75);
+    axis.visible = false;
+    scene.add(axis);
+    
+    const pointLight = new THREE.PointLight(0xffffff, 1.2);
+    pointLight.position.set(-5, 2, 0);
+    scene.add(pointLight);
+    
+    const lensFlaresImg = "https://s3.amazonaws.com/jsfiddle1234/lensflare0.png";
+    const lensflareTexture = textureLoader.load(lensFlaresImg);
+    const lensflareColor = new THREE.Color(0xffffff);
+    const lensflare = new Lensflare();
+    const lensflareElement = new LensflareElement(
+      lensflareTexture,
+      300 * pointLight.intensity,
+      0,
+      lensflareColor
+    );
+    
+    lensflare.addElement(lensflareElement);
+    pointLight.add(lensflare);
+    
+    const earth = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 64, 64),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: textureLoader.load(earthMap),
+        bumpMap: textureLoader.load(earthMap),
+        bumpScale: 0.018,
+        metalness: 0.3,
+        roughness: 0.7
+      })
+    );
+    scene.add(earth);
+    
+    const cloud = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 64, 64),
+      new THREE.MeshStandardMaterial({
+        map: textureLoader.load(cloudMap),
+        alphaMap: textureLoader.load(cloudAlpha),
+        bumpScale: 0.015,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.15
+      })
+    );
+    cloud.scale.set(1.025, 1.025, 1.025);
+    scene.add(cloud);
+    
+    const pointsCount = 1500;
+    const pointsGeo = new THREE.BufferGeometry();
+    const pointsPos = new Float32Array(pointsCount * 3);
+    
+    for (let i = 0; i < pointsCount * 3; i++) {
+      pointsPos[i] = (Math.random() - 0.5) * 15;
+    }
+    pointsGeo.setAttribute("position", new THREE.BufferAttribute(pointsPos, 3));
+    
+    const pointsMat = new THREE.PointsMaterial({
+      size: 0.015,
+      sizeAttenuation: true,
+      color: 0xffffff
+    });
+    
+    const points = new THREE.Points(pointsGeo, pointsMat);
+    scene.add(points);
+    
+    gui.add(gridHelper, 'visible').name('Grid Helper');
+    gui.add(axis, 'visible').name('Axis Helper');
+    gui.add(controls, 'autoRotate').name('Auto Rotate Scene');
+    
+    const sunFolder = gui.addFolder('Sun');
+    sunFolder.add(pointLight, 'intensity').min(0).max(2).step(0.01).name('Sun Intensity').onChange((val) => { lensflareElement.size = val * 300 })
+    sunFolder.add(pointLight.position, 'x').min(-5).max(5).step(0.01).name('Sun X');
+    sunFolder.add(pointLight.position, 'y').min(-5).max(5).step(0.01).name('Sun Y');
+    sunFolder.add(pointLight.position, 'z').min(-5).max(5).step(0.01).name('Sun Z');
+    
+    const earthFolder = gui.addFolder('Earth');
+    earthFolder.add(earth.material, 'metalness').min(0).max(1).step(0.01).name('Earth Metalness');
+    earthFolder.add(earth.material, 'roughness').min(0).max(1).step(0.01).name('Earth Roughness');
+    earthFolder.add(earth.material, 'bumpScale').min(0).max(0.05).step(0.0001).name('Earth Bump Scale');
+    earthFolder.add(earth.material, 'wireframe').name('Earth Wireframe');
+    earthFolder.add(cloud.material, 'opacity').min(0).max(1).step(0.01).name('Cloud Opacity');
+    earthFolder.add(cloud.scale, 'x').min(1.01).max(1.1).step(0.001).name('Cloud Distance').onChange((val) => { cloud.scale.y = val; cloud.scale.z = val; })
+    
+    
+    
+    const clock = new THREE.Clock();
+    
+    const animate = () => {
+      stats.begin();
+      const elapsedTime = clock.getElapsedTime();
+      
+      earth.rotation.y = elapsedTime / 10;
+      cloud.rotation.y = elapsedTime / 10;
+      controls.update();
+      renderer.render(scene, camera);
+    
+      stats.end();
+      requestAnimationFrame(animate);
+};
+
+animate();
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+</script>
